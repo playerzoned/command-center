@@ -197,7 +197,7 @@ select{-webkit-appearance:none;appearance:none}
   <div class="content" id="tab-dashboard"></div>
   <div class="content hidden" id="tab-ideas"></div>
   <div class="content hidden" id="tab-projects"></div>
-  <div class="content hidden" id="tab-journal"></div>
+  <div class="content hidden" id="tab-briefing"></div>
 
   <!-- Bottom Navigation -->
   <div class="bottom-nav">
@@ -211,8 +211,8 @@ select{-webkit-appearance:none;appearance:none}
     <button class="nav-btn" data-tab="projects" onclick="switchTab('projects')">
       <span class="nav-icon">&#x1f4c1;</span>Projekte
     </button>
-    <button class="nav-btn" data-tab="journal" onclick="switchTab('journal')">
-      <span class="nav-icon">&#x1f4dd;</span>Journal
+    <button class="nav-btn" data-tab="briefing" onclick="switchTab('briefing')">
+      <span class="nav-icon">&#x1f3af;</span>Briefing
     </button>
   </div>
 </div>
@@ -276,29 +276,78 @@ function updateBadge(){
 // ===== TABS =====
 function switchTab(name){
   document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.toggle('active',b.dataset.tab===name)});
-  ['dashboard','ideas','projects','journal'].forEach(function(t){document.getElementById('tab-'+t).classList.toggle('hidden',t!==name)});
+  ['dashboard','ideas','projects','briefing'].forEach(function(t){document.getElementById('tab-'+t).classList.toggle('hidden',t!==name)});
   if(name==='dashboard')renderDashboard();
   if(name==='ideas')renderKanban();
   if(name==='projects')renderProjects();
-  if(name==='journal')renderJournal();
+  if(name==='briefing')renderBriefing();
 }
 
 // ===== SEARCH =====
 function handleSearch(q){searchQuery=q.toLowerCase();var active=document.querySelector('.nav-btn.active');if(active)switchTab(active.dataset.tab)}
 function matchSearch(item){if(!searchQuery)return true;var s=searchQuery;return(item.title||'').toLowerCase().includes(s)||(item.name||'').toLowerCase().includes(s)||(item.description||'').toLowerCase().includes(s)||(item.content||'').toLowerCase().includes(s)||(item.category||'').toLowerCase().includes(s)}
 
+// ===== SMART SORT =====
+function smartSortProjects(projects){
+  var catOrder={business:0,hobby:1,privat:2};
+  var prioOrder={high:0,medium:1,low:2};
+  return projects.slice().sort(function(a,b){
+    // 1. Priority first
+    var pa=prioOrder[a.priority]||1,pb=prioOrder[b.priority]||1;
+    if(pa!==pb)return pa-pb;
+    // 2. Business > Hobby > Privat
+    var ca=catOrder[a.category]||1,cb=catOrder[b.category]||1;
+    if(ca!==cb)return ca-cb;
+    // 3. Older active projects first (finish what you started)
+    return new Date(a.created_at)-new Date(b.created_at);
+  });
+}
+
+function getTopFocusProject(){
+  var active=allProjects.filter(function(p){return p.status==='active'});
+  var sorted=smartSortProjects(active);
+  return sorted[0]||null;
+}
+
 // ===== DASHBOARD =====
 function renderDashboard(){
   var c=clearEl('tab-dashboard');
+  var activeP=allProjects.filter(function(p){return p.status==='active'});
+  var activeIdeas=allIdeas.filter(function(i){return i.status==='active'});
+  var inboxIdeas=allIdeas.filter(function(i){return i.status==='inbox'});
+
   // Quick Add
-  var qaInput=el('input',{type:'text',id:'quickIdeaInput',placeholder:'Neue Idee...'});
+  var qaInput=el('input',{type:'text',id:'quickIdeaInput',placeholder:'Neue Idee... (landet in Inbox, nicht ablenken lassen!)'});
   qaInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();quickAddIdea()}});
   c.appendChild(el('div',{className:'quick-add'},[el('div',{className:'quick-add-row'},[qaInput,el('button',{className:'quick-add-btn',onclick:function(){quickAddIdea()}},['+'])])]));
 
-  // Coaching
-  var coaching=el('div',{className:'coaching'});
-  coaching.appendChild(el('h3',null,['Dein Coach']));
+  // FOKUS WARNING
+  if(activeP.length>3){
+    var warn=el('div',{style:{background:'rgba(225,112,85,.15)',border:'1px solid rgba(225,112,85,.4)',borderRadius:'12px',padding:'14px',marginBottom:'14px'}});
+    warn.appendChild(el('div',{style:{fontWeight:'700',fontSize:'.9rem',color:'var(--danger)',marginBottom:'4px'}},['Du hast '+activeP.length+' aktive Projekte!']));
+    warn.appendChild(el('p',{style:{fontSize:'.8rem',color:'var(--muted)'}},['Das ist zu viel. Fokussiere dich auf 2-3 Projekte und pausiere den Rest. Mehr Projekte = weniger Fortschritt.']));
+    c.appendChild(warn);
+  }
+
+  // FOKUS PROJEKT - Das EINE Projekt woran du arbeiten sollst
+  var topProject=getTopFocusProject();
+  if(topProject){
+    var focusCard=el('div',{style:{background:'linear-gradient(135deg,rgba(108,92,231,.2),rgba(0,206,201,.12))',border:'1px solid rgba(108,92,231,.4)',borderRadius:'14px',padding:'16px',marginBottom:'14px'}});
+    focusCard.appendChild(el('div',{style:{fontSize:'.7rem',textTransform:'uppercase',letterSpacing:'.5px',color:'var(--accent)',fontWeight:'700',marginBottom:'6px'}},['Dein Fokus jetzt']));
+    focusCard.appendChild(el('div',{style:{fontSize:'1.1rem',fontWeight:'700',marginBottom:'4px'}},[topProject.name]));
+    if(topProject.description)focusCard.appendChild(el('p',{style:{fontSize:'.82rem',color:'var(--muted)',marginBottom:'6px'}},[topProject.description.length>120?topProject.description.slice(0,120)+'...':topProject.description]));
+    if(topProject.next_steps)focusCard.appendChild(el('div',{style:{fontSize:'.82rem',color:'var(--accent2)',fontWeight:'600'}},['Next: '+topProject.next_steps]));
+    var bar=el('div',{className:'proj-bar',style:{marginTop:'8px'}});var fill=el('div',{className:'proj-bar-fill'});
+    fill.style.width='50%';fill.style.background='var(--success)';bar.appendChild(fill);
+    focusCard.appendChild(bar);
+    focusCard.appendChild(el('div',{style:{fontSize:'.7rem',color:'var(--muted)',marginTop:'6px'}},['Mach das hier fertig bevor du was Neues anfaengst.']));
+    c.appendChild(focusCard);
+  }
+
+  // Coaching message from daily focus
   if(dailyFocus&&dailyFocus.coaching_message){
+    var coaching=el('div',{className:'coaching'});
+    coaching.appendChild(el('h3',null,['Coach sagt:']));
     coaching.appendChild(el('p',null,[dailyFocus.coaching_message]));
     var prios=dailyFocus.top_priorities||[];
     if(prios.length){
@@ -309,45 +358,30 @@ function renderDashboard(){
       });
       coaching.appendChild(prioDiv);
     }
-  }else{
-    coaching.appendChild(el('p',null,['Noch kein Tages-Fokus. Kommt morgen um 9 Uhr automatisch, oder nutze /briefing in Claude Code.']));
+    c.appendChild(coaching);
   }
-  c.appendChild(coaching);
 
   // Stats
-  var inbox=allIdeas.filter(function(i){return i.status==='inbox'}).length;
-  var active=allIdeas.filter(function(i){return i.status==='active'}).length;
-  var parked=allIdeas.filter(function(i){return i.status==='parked'}).length;
-  var activeP=allProjects.filter(function(p){return p.status==='active'}).length;
+  var totalCost=allProjects.reduce(function(s,p){return s+(p.estimated_cost||0)},0);
   var statsRow=el('div',{className:'stats-row'});
-  [{v:inbox,l:'Inbox',c:'var(--inbox)'},{v:active,l:'Aktiv',c:'var(--active)'},{v:parked,l:'Geparkt',c:'var(--parked)'},{v:activeP,l:'Projekte',c:'var(--success)'}].forEach(function(s){
+  [{v:inboxIdeas.length,l:'Inbox',c:'var(--inbox)'},{v:activeIdeas.length,l:'Aktiv',c:'var(--active)'},{v:activeP.length,l:'Projekte',c:'var(--success)'},{v:totalCost>0?totalCost+'E':'0',l:'Kosten',c:'var(--accent)'}].forEach(function(s){
     var valEl=el('div',{className:'val'},[String(s.v)]);valEl.style.color=s.c;
     statsRow.appendChild(el('div',{className:'stat-mini'},[valEl,el('div',{className:'lbl'},[s.l])]));
   });
   c.appendChild(statsRow);
 
-  // Active Projects Preview
-  c.appendChild(el('div',{className:'section-head'},[el('span',null,['Aktive Projekte']),el('span',{style:{color:'var(--accent)',fontSize:'.7rem',cursor:'pointer'},onclick:function(){switchTab('projects')}},['Alle'])]));
-  var activeProjects=allProjects.filter(function(p){return p.status==='active'}).slice(0,5);
-  if(!activeProjects.length)c.appendChild(el('div',{className:'empty'},[el('p',null,['Keine aktiven Projekte'])]));
-  activeProjects.forEach(function(p){c.appendChild(buildMiniProjectCard(p))});
-
-  // Recent Ideas
-  c.appendChild(el('div',{className:'section-head'},[el('span',null,['Neueste Ideen']),el('span',{style:{color:'var(--accent)',fontSize:'.7rem',cursor:'pointer'},onclick:function(){switchTab('ideas')}},['Kanban'])]));
-  var recent=allIdeas.slice(0,5);
-  recent.forEach(function(i){
-    var card=el('div',{className:'card',style:{padding:'10px 14px'}},[
-      el('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},[
-        el('span',{style:{fontSize:'.85rem',fontWeight:'600'}},[i.title]),
-        el('span',{className:'badge badge-'+i.category},[i.category])
-      ]),
-      el('div',{style:{display:'flex',gap:'4px',marginTop:'4px'}},[
-        el('span',{className:'badge',style:{color:'var(--'+i.status+')'}},[i.status]),
-        el('span',{className:'badge',style:{color:'var(--muted)'}},[timeAgo(i.created_at)])
-      ])
-    ]);
-    c.appendChild(card);
-  });
+  // Recent Ideas (compact)
+  if(inboxIdeas.length>0){
+    c.appendChild(el('div',{className:'section-head'},[el('span',null,['Inbox ('+inboxIdeas.length+')']),el('span',{style:{color:'var(--accent)',fontSize:'.7rem',cursor:'pointer'},onclick:function(){switchTab('ideas')}},['Kanban'])]));
+    inboxIdeas.slice(0,3).forEach(function(i){
+      c.appendChild(el('div',{className:'card',style:{padding:'10px 14px'}},[
+        el('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between'}},[
+          el('span',{style:{fontSize:'.85rem',fontWeight:'600'}},[i.title]),
+          el('span',{className:'badge badge-'+i.category},[i.category])
+        ])
+      ]));
+    });
+  }
 }
 
 function buildMiniProjectCard(p){
@@ -448,6 +482,14 @@ function renderKanban(){
 }
 
 async function moveIdea(id,newStatus){
+  // AKTIVIERUNGS-GUARD: Warnung wenn zu viele aktive Ideen
+  if(newStatus==='active'){
+    var activeCount=allIdeas.filter(function(i){return i.status==='active'}).length;
+    if(activeCount>=3){
+      var confirmed=confirm('Du hast schon '+activeCount+' aktive Ideen!\n\nMehr aktive Ideen = mehr Ablenkung = weniger Ergebnisse.\n\nBist du sicher dass du noch eine aktivieren willst?');
+      if(!confirmed){toast('Gut so! Fokus behalten.','var(--accent)');return}
+    }
+  }
   await sb.from('cc_ideas').update({status:newStatus}).eq('id',id);
   dragItem=null;
   var labels={active:'Aktiviert!',parked:'Geparkt!',done:'Erledigt!',inbox:'Zurueck in Inbox!',discarded:'Verworfen!'};
@@ -573,7 +615,7 @@ function renderProjects(){
   });
   c.appendChild(filters);
 
-  var items=allProjects.filter(function(p){return(projFilter==='all'||p.status===projFilter)&&matchSearch(p)});
+  var items=smartSortProjects(allProjects.filter(function(p){return(projFilter==='all'||p.status===projFilter)&&matchSearch(p)}));
   if(!items.length){c.appendChild(el('div',{className:'empty'},[el('p',null,['Keine Projekte mit diesem Filter'])]));return}
   items.forEach(function(p){
     var dot=el('span',{className:'proj-dot '+p.status});
@@ -662,38 +704,100 @@ function showEditProjectModal(p){
   bg.appendChild(modal);bg.addEventListener('click',function(e){if(e.target===bg)closeModal()});mc.appendChild(bg);
 }
 
-// ===== JOURNAL =====
-function renderJournal(){
-  var c=clearEl('tab-journal');
-  // Add entry
-  var titleInput=el('input',{type:'text',id:'jTitle',placeholder:'Titel (optional)'});
-  var contentInput=el('textarea',{id:'jContent',placeholder:'Was bewegt dich?',rows:'3'});
-  var typeSelect=el('select',{id:'jType'},[el('option',{value:'note'},['Notiz']),el('option',{value:'reflection'},['Reflexion']),el('option',{value:'coaching'},['Coaching'])]);
-  var moodSelect=el('select',{id:'jMood'},[el('option',{value:''},['Stimmung?']),el('option',{value:'great'},['Super']),el('option',{value:'good'},['Gut']),el('option',{value:'okay'},['Okay']),el('option',{value:'bad'},['Schlecht']),el('option',{value:'terrible'},['Mies'])]);
-  var addBtn=el('button',{className:'btn-primary',style:{marginTop:'8px'},onclick:addJournal},['Speichern']);
-  c.appendChild(el('div',{className:'quick-add'},[el('div',{style:{fontSize:'.8rem',color:'var(--muted)',fontWeight:'600',marginBottom:'8px'}},['Neuer Eintrag']),titleInput,el('div',{style:{marginTop:'8px'}},[contentInput]),el('div',{className:'row',style:{marginTop:'8px'}},[typeSelect,moodSelect]),addBtn]));
+// ===== BRIEFING =====
+async function renderBriefing(){
+  var c=clearEl('tab-briefing');
 
-  // Entries
-  var moodEmoji={great:'\u{1f929}',good:'\u{1f60a}',okay:'\u{1f610}',bad:'\u{1f61e}',terrible:'\u{1f629}'};
-  var items=allJournal.filter(matchSearch);
-  if(!items.length){c.appendChild(el('div',{className:'empty'},[el('p',null,['Noch keine Eintraege'])]));return}
-  items.forEach(function(j){
-    var titleText=(j.title||j.entry_type)+(j.mood?' '+moodEmoji[j.mood]:'');
+  // Tages-Briefing Section
+  var briefingSection=el('div',{style:{marginBottom:'18px'}});
+  briefingSection.appendChild(el('div',{className:'section-head'},['Tages-Briefing']));
+
+  if(dailyFocus){
+    // Coaching message
+    if(dailyFocus.coaching_message){
+      var coachCard=el('div',{className:'coaching'});
+      coachCard.appendChild(el('h3',null,['Coach sagt:']));
+      coachCard.appendChild(el('p',null,[dailyFocus.coaching_message]));
+      // Priorities
+      var prios=dailyFocus.top_priorities||[];
+      if(prios.length){
+        var prioDiv=el('div',{className:'coaching-priorities'});
+        prios.forEach(function(p,i){
+          var txt=typeof p==='string'?p:(p.text||'');
+          prioDiv.appendChild(el('div',{className:'coaching-prio'},[el('span',{className:'coaching-num'},[String(i+1)]),el('span',{style:{fontSize:'.82rem'}},[txt])]));
+        });
+        coachCard.appendChild(prioDiv);
+      }
+      briefingSection.appendChild(coachCard);
+    }
+    // Warnings
+    var warnings=dailyFocus.warnings||[];
+    warnings.forEach(function(w){
+      var txt=typeof w==='string'?w:(w.text||'');
+      briefingSection.appendChild(el('div',{style:{background:'rgba(225,112,85,.12)',border:'1px solid rgba(225,112,85,.3)',borderRadius:'10px',padding:'10px 14px',marginTop:'8px',fontSize:'.82rem',color:'var(--danger)'}},['! '+txt]));
+    });
+  }else{
+    briefingSection.appendChild(el('div',{className:'coaching'},[
+      el('h3',null,['Noch kein Briefing fuer heute']),
+      el('p',null,['Das Briefing wird jeden Morgen um 9 Uhr automatisch erstellt. Du kannst es auch manuell ausloesen: Sag /briefing in Claude Code.'])
+    ]));
+  }
+  c.appendChild(briefingSection);
+
+  // Wochen-Ziele
+  c.appendChild(el('div',{className:'section-head'},['Wochen-Ziele']));
+  var weeklyGoals=(dailyFocus&&dailyFocus.weekly_goals)||[];
+  if(weeklyGoals.length){
+    weeklyGoals.forEach(function(g){
+      var txt=typeof g==='string'?g:(g.text||'');
+      c.appendChild(el('div',{className:'card',style:{padding:'10px 14px'}},[
+        el('span',{style:{fontSize:'.85rem'}},[txt])
+      ]));
+    });
+  }else{
+    c.appendChild(el('div',{className:'card',style:{padding:'10px 14px'}},[
+      el('span',{style:{fontSize:'.82rem',color:'var(--muted)'}},['Werden beim naechsten Briefing gesetzt.'])
+    ]));
+  }
+
+  // Aktivitaets-Log
+  c.appendChild(el('div',{className:'section-head',style:{marginTop:'18px'}},['Aktivitaets-Log']));
+  var logR=await sb.from('cc_auto_log').select('*').eq('user_id',currentUser.id).order('created_at',{ascending:false}).limit(15);
+  var logs=logR.data||[];
+  if(!logs.length){
+    c.appendChild(el('div',{className:'card',style:{padding:'10px 14px'}},[
+      el('span',{style:{fontSize:'.82rem',color:'var(--muted)'}},['Noch keine automatischen Aktionen. Hier erscheint was Claude im Hintergrund macht.'])
+    ]));
+  }
+  logs.forEach(function(log){
+    var dateStr=new Date(log.created_at).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+    c.appendChild(el('div',{className:'card',style:{padding:'10px 14px'}},[
+      el('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},[
+        el('span',{style:{fontSize:'.82rem',fontWeight:'600'}},[log.action_type]),
+        el('span',{className:'badge',style:{color:'var(--muted)'}},[dateStr])
+      ]),
+      el('div',{style:{fontSize:'.78rem',color:'var(--muted)',marginTop:'3px'}},[log.description])
+    ]));
+  });
+
+  // Letzte Coaching-Eintraege aus Journal-Tabelle
+  c.appendChild(el('div',{className:'section-head',style:{marginTop:'18px'}},['Letzte Recaps']));
+  var recaps=allJournal.filter(function(j){return j.entry_type==='recap'||j.entry_type==='briefing'||j.entry_type==='coaching'});
+  if(!recaps.length){
+    c.appendChild(el('div',{className:'card',style:{padding:'10px 14px'}},[
+      el('span',{style:{fontSize:'.82rem',color:'var(--muted)'}},['Noch keine Recaps. Der erste kommt am Sonntag automatisch.'])
+    ]));
+  }
+  recaps.slice(0,5).forEach(function(j){
     var dateStr=new Date(j.created_at).toLocaleString('de-DE',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
     c.appendChild(el('div',{className:'card'},[
       el('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center'}},[
-        el('div',{className:'card-title'},[titleText]),
+        el('div',{className:'card-title'},[j.title||j.entry_type]),
         el('span',{className:'badge',style:{color:'var(--muted)'}},[dateStr])
       ]),
       el('div',{className:'card-desc'},[j.content])
     ]));
   });
-}
-
-async function addJournal(){
-  var content=document.getElementById('jContent').value.trim();if(!content)return toast('Inhalt!','var(--danger)');
-  await sb.from('cc_journal').insert({user_id:currentUser.id,content:content,title:document.getElementById('jTitle').value.trim()||null,entry_type:document.getElementById('jType').value,mood:document.getElementById('jMood').value||null});
-  toast('Gespeichert!');await loadAll();renderJournal();
 }
 
 // ===== INIT =====
