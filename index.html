@@ -484,6 +484,11 @@ function showIdeaDetail(idea){
   moves.forEach(function(m){
     actions.appendChild(el('button',{className:'btn-sm '+m.c,style:{padding:'10px',fontSize:'.85rem',width:'100%'},onclick:function(){closeModal();moveIdea(idea.id,m.s)}},[m.l]));
   });
+  // Promote to project button (only for inbox/active ideas)
+  if(idea.status==='inbox'||idea.status==='active'){
+    var promoteBtn=el('button',{className:'btn-sm',style:{padding:'10px',fontSize:'.85rem',width:'100%',background:'linear-gradient(135deg,var(--accent),var(--accent2))',color:'#fff',border:'none',borderRadius:'8px',fontWeight:'700'},onclick:function(){closeModal();promoteToProject(idea)}},['Zum Projekt machen']);
+    actions.appendChild(promoteBtn);
+  }
   actions.appendChild(el('button',{className:'btn-sm btn-delete',style:{padding:'10px',fontSize:'.85rem',width:'100%'},onclick:function(){if(confirm('Loeschen?')){closeModal();deleteIdea(idea.id)}}},[' Loeschen']));
   modal.appendChild(actions);
   modal.appendChild(el('button',{style:{marginTop:'12px',width:'100%',padding:'10px',color:'var(--muted)',fontSize:'.85rem'},onclick:closeModal},['Schliessen']));
@@ -509,6 +514,43 @@ function showAddIdeaModal(){
     await sb.from('cc_ideas').insert({user_id:currentUser.id,title:t,description:document.getElementById('modalIdeaDesc').value.trim()||null,category:document.getElementById('modalIdeaCat').value,priority:document.getElementById('modalIdeaPrio').value});
     closeModal();toast('Gespeichert!');await loadAll();renderKanban();
   }},['Speichern']));
+  modal.appendChild(el('button',{style:{marginTop:'8px',width:'100%',padding:'10px',color:'var(--muted)',fontSize:'.85rem'},onclick:closeModal},['Abbrechen']));
+  bg.appendChild(modal);bg.addEventListener('click',function(e){if(e.target===bg)closeModal()});mc.appendChild(bg);
+}
+
+async function promoteToProject(idea){
+  // Show cost estimation modal
+  var mc=clearEl('modalContainer');
+  var bg=el('div',{className:'modal-bg'});
+  var modal=el('div',{className:'modal'});
+  modal.appendChild(el('h3',null,['Idee zum Projekt machen']));
+  modal.appendChild(el('p',{style:{fontSize:'.85rem',color:'var(--muted)',marginBottom:'14px'}},['\"'+idea.title+'\" wird ein aktives Projekt.']));
+  var nameInput=el('input',{type:'text',id:'promName',value:idea.title});
+  var descInput=el('textarea',{id:'promDesc',rows:'2'});
+  if(idea.description)descInput.value=idea.description;
+  var costInput=el('input',{type:'number',id:'promCost',placeholder:'0',value:'0'});
+  var costNotes=el('input',{type:'text',id:'promCostNotes',placeholder:'z.B. Hosting, Domains, Tools...'});
+  modal.appendChild(el('div',{className:'field'},[el('label',null,['Projektname']),nameInput]));
+  modal.appendChild(el('div',{className:'field'},[el('label',null,['Beschreibung']),descInput]));
+  modal.appendChild(el('div',{className:'row'},[
+    el('div',{className:'field'},[el('label',null,['Geschaetzte Kosten (EUR)']),costInput]),
+    el('div',{className:'field'},[el('label',null,['Kosten-Details']),costNotes])
+  ]));
+  modal.appendChild(el('button',{className:'btn-primary',onclick:async function(){
+    var name=document.getElementById('promName').value.trim();if(!name)return toast('Name!','var(--danger)');
+    var r=await sb.from('cc_projects').insert({
+      user_id:currentUser.id,name:name,
+      description:document.getElementById('promDesc').value.trim()||null,
+      category:idea.category,priority:idea.priority,status:'active',
+      estimated_cost:parseFloat(document.getElementById('promCost').value)||0,
+      cost_notes:document.getElementById('promCostNotes').value.trim()||null
+    }).select('id').single();
+    // Mark idea as done
+    await sb.from('cc_ideas').update({status:'done'}).eq('id',idea.id);
+    // Auto-log
+    if(r.data)await sb.from('cc_auto_log').insert({user_id:currentUser.id,action_type:'promote',description:'Idee \"'+idea.title+'\" zu Projekt befoerdert',related_project_id:r.data.id,related_idea_id:idea.id});
+    closeModal();toast('Projekt erstellt!');await loadAll();renderKanban();
+  }},['Projekt erstellen']));
   modal.appendChild(el('button',{style:{marginTop:'8px',width:'100%',padding:'10px',color:'var(--muted)',fontSize:'.85rem'},onclick:closeModal},['Abbrechen']));
   bg.appendChild(modal);bg.addEventListener('click',function(e){if(e.target===bg)closeModal()});mc.appendChild(bg);
 }
@@ -548,6 +590,17 @@ function renderProjects(){
     fill.style.width=pct+'%';fill.style.background=p.status==='active'?'var(--success)':p.status==='paused'?'var(--warning)':'var(--muted)';
     bar.appendChild(fill);card.appendChild(bar);
 
+    // Cost display
+    if(p.estimated_cost>0||p.actual_cost>0){
+      var costLine=[];
+      if(p.estimated_cost>0)costLine.push('Geschaetzt: '+p.estimated_cost+' EUR');
+      if(p.actual_cost>0)costLine.push('Ausgegeben: '+p.actual_cost+' EUR');
+      var costEl=el('div',{style:{fontSize:'.72rem',marginTop:'6px',display:'flex',gap:'10px'}});
+      costLine.forEach(function(t){costEl.appendChild(el('span',{className:'badge',style:{background:'rgba(108,92,231,.15)',color:'var(--accent)'}},[t]))});
+      if(p.cost_notes)costEl.appendChild(el('span',{style:{color:'var(--muted)',fontSize:'.7rem'}},[p.cost_notes]));
+      card.appendChild(costEl);
+    }
+
     // Related ideas count
     var relatedCount=allIdeas.filter(function(i){return i.category===p.category&&(i.status==='active'||i.status==='inbox')}).length;
     if(relatedCount>0)card.appendChild(el('div',{style:{fontSize:'.72rem',color:'var(--muted)',marginTop:'6px'}},[relatedCount+' verwandte Ideen ('+p.category+')']));
@@ -560,6 +613,7 @@ function renderProjects(){
     }else if(p.status==='paused'){
       actions.appendChild(el('button',{className:'btn-sm btn-activate',onclick:function(){updateProject(p.id,'active')}},['Fortsetzen']));
     }
+    actions.appendChild(el('button',{className:'btn-sm btn-edit',onclick:function(){showEditProjectModal(p)}},['Bearbeiten']));
     card.appendChild(actions);
     c.appendChild(card);
   });
@@ -567,6 +621,45 @@ function renderProjects(){
 
 async function updateProject(id,status){
   await sb.from('cc_projects').update({status:status}).eq('id',id);toast('Aktualisiert!');await loadAll();renderProjects();
+}
+
+function showEditProjectModal(p){
+  var mc=clearEl('modalContainer');
+  var bg=el('div',{className:'modal-bg'});
+  var modal=el('div',{className:'modal'});
+  modal.appendChild(el('h3',null,['Projekt bearbeiten']));
+  var nameInput=el('input',{type:'text',id:'editProjName',value:p.name});
+  var descInput=el('textarea',{id:'editProjDesc',rows:'2'});if(p.description)descInput.value=p.description;
+  var nextInput=el('input',{type:'text',id:'editProjNext',value:p.next_steps||'',placeholder:'Was ist der naechste Schritt?'});
+  var costInput=el('input',{type:'number',id:'editProjCost',value:String(p.estimated_cost||0)});
+  var actualInput=el('input',{type:'number',id:'editProjActual',value:String(p.actual_cost||0)});
+  var costNotes=el('input',{type:'text',id:'editProjCostNotes',value:p.cost_notes||'',placeholder:'Hosting, Domains, Tools...'});
+  var prioSelect=el('select',{id:'editProjPrio'},[el('option',{value:'high'},['Hoch']),el('option',{value:'medium'},['Mittel']),el('option',{value:'low'},['Niedrig'])]);
+  prioSelect.value=p.priority;
+  modal.appendChild(el('div',{className:'field'},[el('label',null,['Name']),nameInput]));
+  modal.appendChild(el('div',{className:'field'},[el('label',null,['Beschreibung']),descInput]));
+  modal.appendChild(el('div',{className:'field'},[el('label',null,['Naechster Schritt']),nextInput]));
+  modal.appendChild(el('div',{className:'field'},[el('label',null,['Prioritaet']),prioSelect]));
+  modal.appendChild(el('div',{className:'section-head',style:{marginTop:'12px'}},['Kosten']));
+  modal.appendChild(el('div',{className:'row'},[
+    el('div',{className:'field'},[el('label',null,['Geschaetzt (EUR)']),costInput]),
+    el('div',{className:'field'},[el('label',null,['Ausgegeben (EUR)']),actualInput])
+  ]));
+  modal.appendChild(el('div',{className:'field'},[el('label',null,['Kosten-Details']),costNotes]));
+  modal.appendChild(el('button',{className:'btn-primary',onclick:async function(){
+    await sb.from('cc_projects').update({
+      name:document.getElementById('editProjName').value.trim(),
+      description:document.getElementById('editProjDesc').value.trim()||null,
+      next_steps:document.getElementById('editProjNext').value.trim()||null,
+      priority:document.getElementById('editProjPrio').value,
+      estimated_cost:parseFloat(document.getElementById('editProjCost').value)||0,
+      actual_cost:parseFloat(document.getElementById('editProjActual').value)||0,
+      cost_notes:document.getElementById('editProjCostNotes').value.trim()||null
+    }).eq('id',p.id);
+    closeModal();toast('Gespeichert!');await loadAll();renderProjects();
+  }},['Speichern']));
+  modal.appendChild(el('button',{style:{marginTop:'8px',width:'100%',padding:'10px',color:'var(--muted)',fontSize:'.85rem'},onclick:closeModal},['Abbrechen']));
+  bg.appendChild(modal);bg.addEventListener('click',function(e){if(e.target===bg)closeModal()});mc.appendChild(bg);
 }
 
 // ===== JOURNAL =====
