@@ -197,6 +197,7 @@ select{-webkit-appearance:none;appearance:none}
   <div class="content" id="tab-dashboard"></div>
   <div class="content hidden" id="tab-alles"></div>
   <div class="content hidden" id="tab-briefing"></div>
+  <div class="content hidden" id="tab-wishlist"></div>
 
   <!-- Bottom Navigation -->
   <div class="bottom-nav">
@@ -208,6 +209,9 @@ select{-webkit-appearance:none;appearance:none}
     </button>
     <button class="nav-btn" data-tab="briefing" onclick="switchTab('briefing')">
       <span class="nav-icon">&#x1f3af;</span>Briefing
+    </button>
+    <button class="nav-btn" data-tab="wishlist" onclick="switchTab('wishlist')">
+      <span class="nav-icon">&#x1f381;</span>Wunschliste
     </button>
   </div>
 </div>
@@ -271,10 +275,11 @@ function updateBadge(){
 // ===== TABS =====
 function switchTab(name){
   document.querySelectorAll('.nav-btn').forEach(function(b){b.classList.toggle('active',b.dataset.tab===name)});
-  ['dashboard','alles','briefing'].forEach(function(t){document.getElementById('tab-'+t).classList.toggle('hidden',t!==name)});
+  ['dashboard','alles','briefing','wishlist'].forEach(function(t){document.getElementById('tab-'+t).classList.toggle('hidden',t!==name)});
   if(name==='dashboard')renderDashboard();
   if(name==='alles')renderAlles();
   if(name==='briefing')renderBriefing();
+  if(name==='wishlist')renderWishlist();
 }
 
 // ===== SEARCH =====
@@ -668,6 +673,85 @@ function showEditProjectModal(p){
   }},['Speichern']));
   modal.appendChild(el('button',{style:{marginTop:'8px',width:'100%',padding:'10px',color:'var(--muted)',fontSize:'.85rem'},onclick:closeModal},['Abbrechen']));
   bg.appendChild(modal);bg.addEventListener('click',function(e){if(e.target===bg)closeModal()});mc.appendChild(bg);
+}
+
+// ===== WISHLIST =====
+async function renderWishlist(){
+  var c=clearEl('tab-wishlist');
+
+  // Quick Add
+  var qaInput=el('input',{type:'text',id:'wishInput',placeholder:'Neuer Wunsch...'});
+  qaInput.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();addWish()}});
+  c.appendChild(el('div',{className:'quick-add'},[el('div',{className:'quick-add-row'},[qaInput,el('button',{className:'quick-add-btn',onclick:function(){addWish()}},['+'])])]));
+
+  // Load wishes
+  var r=await sb.from('wishlist').select('*').eq('user_id',currentUser.id).order('completed',{ascending:true}).order('created_at',{ascending:false});
+  var wishes=r.data||[];
+
+  // Stats
+  var open=wishes.filter(function(w){return!w.completed}).length;
+  var done=wishes.filter(function(w){return w.completed}).length;
+  var statsRow=el('div',{className:'stats-row'});
+  [{v:open,l:'Offen',c:'var(--accent)'},{v:done,l:'Erledigt',c:'var(--success)'}].forEach(function(s){
+    var valEl=el('div',{className:'val'},[String(s.v)]);valEl.style.color=s.c;
+    statsRow.appendChild(el('div',{className:'stat-mini'},[valEl,el('div',{className:'lbl'},[s.l])]));
+  });
+  c.appendChild(statsRow);
+
+  if(!wishes.length){c.appendChild(el('div',{className:'empty'},[el('p',null,['Noch keine Wuensche. Trag oben was ein!'])]));return}
+
+  // Render wishes
+  wishes.forEach(function(w){
+    var isDone=w.completed;
+    var card=el('div',{className:'card',style:{padding:'10px 14px',opacity:isDone?'0.5':'1',display:'flex',alignItems:'center',gap:'10px'}});
+
+    var checkbox=el('input',{type:'checkbox',style:{width:'18px',height:'18px',accentColor:'var(--success)',cursor:'pointer',flexShrink:'0'}});
+    checkbox.checked=isDone;
+    checkbox.addEventListener('change',function(){toggleWish(w.id,this.checked)});
+
+    var textDiv=el('div',{style:{flex:'1'}});
+    var titleEl=el('span',{style:{fontSize:'.9rem',fontWeight:'600',textDecoration:isDone?'line-through':'none'}},[w.text||w.summary||'']);
+    textDiv.appendChild(titleEl);
+
+    if(w.price){
+      textDiv.appendChild(el('div',{style:{fontSize:'.75rem',color:'var(--muted)',marginTop:'2px'}},[w.price+' EUR']));
+    }
+    if(w.link){
+      var linkEl=el('a',{href:w.link,target:'_blank',style:{fontSize:'.75rem',color:'var(--accent)',marginTop:'2px',display:'block'}},['Link']);
+      textDiv.appendChild(linkEl);
+    }
+
+    var delBtn=el('button',{style:{color:'var(--danger)',fontSize:'.8rem',padding:'4px 8px',border:'1px solid rgba(225,112,85,.3)',borderRadius:'6px',flexShrink:'0'},onclick:function(){deleteWish(w.id)}},['X']);
+
+    card.appendChild(checkbox);
+    card.appendChild(textDiv);
+    card.appendChild(delBtn);
+    c.appendChild(card);
+  });
+}
+
+async function addWish(){
+  var input=document.getElementById('wishInput');
+  var text=input.value.trim();
+  if(!text)return toast('Wunsch eingeben!','var(--danger)');
+  var id='wish-'+Date.now();
+  await sb.from('wishlist').insert({id:id,user_id:currentUser.id,text:text,category_id:'wunschliste',priority:'medium'});
+  input.value='';
+  toast('Wunsch gespeichert!');
+  renderWishlist();
+}
+
+async function toggleWish(id,completed){
+  await sb.from('wishlist').update({completed:completed}).eq('id',id);
+  toast(completed?'Erledigt!':'Wieder offen!');
+  renderWishlist();
+}
+
+async function deleteWish(id){
+  if(!confirm('Wunsch loeschen?'))return;
+  await sb.from('wishlist').delete().eq('id',id);
+  toast('Geloescht!');
+  renderWishlist();
 }
 
 // ===== BRIEFING =====
