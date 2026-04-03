@@ -169,7 +169,7 @@ const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
 const SHOP='my-tesla-tuning.myshopify.com';
 const API_VER='2024-01';
-let SHOPIFY_TOKEN=localStorage.getItem('mtt_shopify_token')||'';
+let SHOPIFY_TOKEN='';
 let currentUser=null;
 let settings={dispatch_days:[true,true,true,true,true,true,true],dispatch_time:'22:00',dispatch_delay:1,carrier_days:[true,true,true,true,true,true,false],min_delivery_days:1,max_delivery_days:3,free_shipping_threshold:50};
 let holidays=[];
@@ -189,13 +189,12 @@ function handleLogout(){sb.auth.signOut();currentUser=null;document.getElementBy
 
 async function showApp(){
   document.getElementById('loginScreen').classList.add('hidden');
-  // Check if Shopify token exists
-  if(!SHOPIFY_TOKEN){
-    var token=prompt('Shopify API Token eingeben (wird lokal gespeichert):');
-    if(!token||!token.startsWith('shpat_')){alert('Ungueltiger Token');return}
-    SHOPIFY_TOKEN=token;
-    localStorage.setItem('mtt_shopify_token',token);
-  }
+  // Load Shopify token from Supabase
+  try{
+    var r=await sb.from('user_settings').select('shopify_token,shopify_shop').eq('user_id',currentUser.id).maybeSingle();
+    if(r.data&&r.data.shopify_token){SHOPIFY_TOKEN=r.data.shopify_token}
+    else{document.getElementById('statusBar').className='status-bar error';document.getElementById('statusBar').innerHTML='Kein Shopify Token hinterlegt. Kontaktiere den Admin.';return}
+  }catch(e){console.error(e)}
   document.getElementById('appScreen').classList.remove('hidden');
   await loadSettings();
   updatePreview();
