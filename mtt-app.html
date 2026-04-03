@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MTT App Manager</title>
+<style>
+:root{--bg:#0a0a14;--card:#13132a;--card2:#1a1a36;--border:#1e1e3a;--accent:#6c5ce7;--accent2:#00cec9;--text:#e0e0f0;--muted:#6b7094;--success:#00b894;--warning:#fdcb6e;--danger:#e17055}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh}
+button{cursor:pointer;font-family:inherit;border:none;background:none;color:inherit}
+input,select,textarea{font-family:inherit;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:.9rem;outline:none}
+input:focus,select:focus{border-color:var(--accent)}
+
+/* Layout */
+.app{display:flex;min-height:100vh}
+.sidebar{width:220px;background:var(--card);border-right:1px solid var(--border);padding:20px 0;flex-shrink:0}
+.sidebar h1{font-size:.85rem;padding:0 16px 16px;color:var(--accent);letter-spacing:1px}
+.sidebar .nav-item{display:block;padding:10px 16px;font-size:.85rem;color:var(--muted);cursor:pointer;border-left:3px solid transparent;transition:all .15s}
+.sidebar .nav-item:hover{background:var(--card2);color:var(--text)}
+.sidebar .nav-item.active{color:var(--accent);border-left-color:var(--accent);background:rgba(108,92,231,.08)}
+.sidebar .nav-item .nav-icon{margin-right:8px}
+.sidebar .nav-status{font-size:.65rem;padding:2px 6px;border-radius:4px;margin-left:6px;font-weight:700}
+.nav-status.live{background:rgba(0,184,148,.2);color:var(--success)}
+.nav-status.soon{background:rgba(253,203,110,.2);color:var(--warning)}
+.main{flex:1;padding:24px 32px;overflow-y:auto}
+
+/* Login */
+.login{display:flex;align-items:center;justify-content:center;height:100vh;width:100%}
+.login-box{max-width:400px;width:100%;text-align:center}
+.login-box h1{font-size:1.5rem;margin-bottom:6px;color:var(--accent)}
+.login-box p{color:var(--muted);font-size:.85rem;margin-bottom:20px}
+.login-box input{width:100%;margin-bottom:12px}
+.login-box .btn{width:100%;padding:12px;background:var(--accent);color:#fff;border-radius:8px;font-weight:700;font-size:.95rem}
+.login-box .hint{font-size:.75rem;color:var(--muted);margin-top:12px;line-height:1.5}
+.login-error{color:var(--danger);font-size:.8rem;margin-top:8px;min-height:20px}
+
+/* Header */
+.page-header{margin-bottom:24px}
+.page-header h2{font-size:1.3rem;font-weight:700}
+.page-header p{color:var(--muted);font-size:.85rem;margin-top:4px}
+
+/* Cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:16px}
+.card h3{font-size:.95rem;font-weight:700;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.card h3 .icon{font-size:1.1rem}
+
+/* Form Groups */
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:.78rem;color:var(--muted);margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:.3px}
+.form-row{display:flex;gap:12px;flex-wrap:wrap}
+.form-row>*{flex:1;min-width:120px}
+
+/* Checkboxes */
+.day-grid{display:flex;gap:6px;flex-wrap:wrap}
+.day-check{display:flex;flex-direction:column;align-items:center;gap:2px}
+.day-check input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent)}
+.day-check span{font-size:.7rem;color:var(--muted)}
+
+/* Holiday List */
+.holiday-list{max-height:200px;overflow-y:auto}
+.holiday-item{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--bg);border-radius:6px;margin-bottom:4px;font-size:.85rem}
+.holiday-item .del{color:var(--danger);cursor:pointer;font-size:.8rem;padding:2px 6px}
+.holiday-add{display:flex;gap:8px;margin-top:8px}
+.holiday-add input{flex:1}
+
+/* Override List */
+.override-item{display:flex;justify-content:space-between;align-items:center;padding:8px 10px;background:var(--bg);border-radius:6px;margin-bottom:4px;font-size:.85rem;gap:8px}
+.override-item .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.override-item input{width:60px;text-align:center;padding:4px 6px;font-size:.8rem}
+.override-item .del{color:var(--danger);cursor:pointer;font-size:.8rem;padding:2px 6px;flex-shrink:0}
+.override-search{display:flex;gap:8px;margin-top:8px}
+.override-search input{flex:1}
+.override-results{max-height:150px;overflow-y:auto;margin-top:4px}
+.override-result{padding:6px 10px;background:var(--card2);border-radius:6px;margin-bottom:3px;font-size:.82rem;cursor:pointer}
+.override-result:hover{background:var(--accent);color:#fff}
+
+/* Preview */
+.preview-box{background:#fff;color:#222;border-radius:10px;padding:16px;font-size:.95rem;line-height:1.6}
+
+/* Buttons */
+.btn-save{background:var(--success);color:#fff;padding:10px 24px;border-radius:8px;font-weight:700;font-size:.9rem}
+.btn-save:hover{opacity:.9}
+.btn-sm{font-size:.75rem;padding:4px 10px;border-radius:6px;font-weight:600;border:1px solid var(--border)}
+
+/* Toast */
+.toast{position:fixed;bottom:20px;right:20px;padding:10px 20px;border-radius:8px;font-size:.85rem;font-weight:600;opacity:0;transition:opacity .3s;z-index:999;pointer-events:none}
+.toast.show{opacity:1}
+
+/* Status */
+.status-bar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:8px;font-size:.8rem;margin-bottom:16px}
+.status-bar.connected{background:rgba(0,184,148,.1);border:1px solid rgba(0,184,148,.3);color:var(--success)}
+.status-bar.error{background:rgba(225,112,85,.1);border:1px solid rgba(225,112,85,.3);color:var(--danger)}
+
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen" class="login">
+<div class="login-box">
+<h1>MTT App Manager</h1>
+<p>Custom App fuer MyTeslaTuning</p>
+<div class="form-group"><label>Shop URL</label><input type="text" id="loginShop" value="my-tesla-tuning.myshopify.com" readonly></div>
+<div class="form-group"><label>API Access Token</label><input type="password" id="loginToken" placeholder="shpat_..."></div>
+<button class="btn" onclick="handleLogin()">Verbinden</button>
+<div id="loginError" class="login-error"></div>
+<p class="hint">Dein Token wird NUR lokal in deinem Browser gespeichert und nie an Dritte gesendet. Alle API-Calls gehen direkt zu Shopify.</p>
+</div>
+</div>
+
+<!-- APP -->
+<div id="appScreen" class="app hidden">
+
+<!-- Sidebar -->
+<div class="sidebar">
+<h1>MTT APP MANAGER</h1>
+<div class="nav-item active" data-tab="delivery" onclick="switchTab('delivery')">
+<span class="nav-icon">📦</span>Delivery Estimator<span class="nav-status live">LIVE</span>
+</div>
+<div class="nav-item" data-tab="cart" onclick="switchTab('cart')">
+<span class="nav-icon">🛒</span>Cart Drawer<span class="nav-status soon">BALD</span>
+</div>
+<div class="nav-item" data-tab="upsell" onclick="switchTab('upsell')">
+<span class="nav-icon">💰</span>Upsell<span class="nav-status soon">BALD</span>
+</div>
+<div class="nav-item" data-tab="loyalty" onclick="switchTab('loyalty')">
+<span class="nav-icon">⭐</span>Loyalty<span class="nav-status soon">BALD</span>
+</div>
+<div style="padding:16px;margin-top:auto;border-top:1px solid var(--border);position:absolute;bottom:0;width:220px">
+<button style="font-size:.75rem;color:var(--danger)" onclick="handleLogout()">Abmelden</button>
+</div>
+</div>
+
+<!-- Main Content -->
+<div class="main">
+
+<!-- Connection Status -->
+<div id="statusBar" class="status-bar connected">
+<span>&#9679;</span> Verbunden mit <strong id="shopName">my-tesla-tuning.myshopify.com</strong>
+</div>
+
+<!-- TAB: Delivery Estimator -->
+<div id="tab-delivery">
+<div class="page-header">
+<h2>📦 Delivery Estimator</h2>
+<p>Lieferzeit-Anzeige auf Produktseiten und im Warenkorb</p>
+</div>
+
+<!-- Dispatch Settings -->
+<div class="card">
+<h3><span class="icon">🏭</span> Versand-Einstellungen (Dispatch)</h3>
+<div class="form-group">
+<label>Arbeitstage (wann versendest du?)</label>
+<div class="day-grid">
+<div class="day-check"><input type="checkbox" id="d_mon" checked><span>Mo</span></div>
+<div class="day-check"><input type="checkbox" id="d_tue" checked><span>Di</span></div>
+<div class="day-check"><input type="checkbox" id="d_wed" checked><span>Mi</span></div>
+<div class="day-check"><input type="checkbox" id="d_thu" checked><span>Do</span></div>
+<div class="day-check"><input type="checkbox" id="d_fri" checked><span>Fr</span></div>
+<div class="day-check"><input type="checkbox" id="d_sat" checked><span>Sa</span></div>
+<div class="day-check"><input type="checkbox" id="d_sun" checked><span>So</span></div>
+</div>
+</div>
+<div class="form-row">
+<div class="form-group">
+<label>Versand-Deadline (Uhrzeit)</label>
+<input type="time" id="dispatchTime" value="22:00">
+</div>
+<div class="form-group">
+<label>Bearbeitungszeit (Tage)</label>
+<input type="number" id="dispatchDelay" value="1" min="0" max="14">
+</div>
+</div>
+</div>
+
+<!-- Carrier Settings -->
+<div class="card">
+<h3><span class="icon">🚚</span> Lieferung (Carrier)</h3>
+<div class="form-group">
+<label>Zustelltage des Versanddienstleisters</label>
+<div class="day-grid">
+<div class="day-check"><input type="checkbox" id="c_mon" checked><span>Mo</span></div>
+<div class="day-check"><input type="checkbox" id="c_tue" checked><span>Di</span></div>
+<div class="day-check"><input type="checkbox" id="c_wed" checked><span>Mi</span></div>
+<div class="day-check"><input type="checkbox" id="c_thu" checked><span>Do</span></div>
+<div class="day-check"><input type="checkbox" id="c_fri" checked><span>Fr</span></div>
+<div class="day-check"><input type="checkbox" id="c_sat" checked><span>Sa</span></div>
+<div class="day-check"><input type="checkbox" id="c_sun"><span>So</span></div>
+</div>
+</div>
+<div class="form-row">
+<div class="form-group">
+<label>Minimale Liefertage</label>
+<input type="number" id="minDays" value="1" min="0" max="60">
+</div>
+<div class="form-group">
+<label>Maximale Liefertage</label>
+<input type="number" id="maxDays" value="3" min="0" max="60">
+</div>
+</div>
+<div class="form-group">
+<label>Kostenloser Versand ab (EUR, 0 = deaktiviert)</label>
+<input type="number" id="freeShipping" value="50" min="0">
+</div>
+</div>
+
+<!-- Holidays -->
+<div class="card">
+<h3><span class="icon">📅</span> Feiertage</h3>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">An diesen Tagen wird nicht versendet/zugestellt. Die Lieferzeit verschiebt sich automatisch.</p>
+<div id="holidayList" class="holiday-list"></div>
+<div class="holiday-add">
+<input type="date" id="holidayDate">
+<input type="text" id="holidayName" placeholder="Name (optional)" style="max-width:150px">
+<button class="btn-sm" style="border-color:var(--accent);color:var(--accent)" onclick="addHoliday()">+ Hinzufuegen</button>
+</div>
+</div>
+
+<!-- Product Overrides -->
+<div class="card">
+<h3><span class="icon">📋</span> Produkt-Ausnahmen</h3>
+<p style="font-size:.8rem;color:var(--muted);margin-bottom:10px">Produkte mit abweichender Lieferzeit (z.B. Vorbestellungen, Sonderanfertigungen)</p>
+<div id="overrideList"></div>
+<div class="override-search">
+<input type="text" id="overrideSearch" placeholder="Produkt suchen..." oninput="searchProducts(this.value)">
+</div>
+<div id="overrideResults" class="override-results"></div>
+</div>
+
+<!-- Preview -->
+<div class="card">
+<h3><span class="icon">👁</span> Live-Vorschau</h3>
+<div id="deliveryPreview" class="preview-box"></div>
+</div>
+
+<!-- Save -->
+<div style="display:flex;justify-content:flex-end;gap:12px;margin-top:8px">
+<button class="btn-save" onclick="saveAll()">Einstellungen speichern</button>
+</div>
+
+</div>
+
+<!-- TAB: Cart Drawer (Placeholder) -->
+<div id="tab-cart" class="hidden">
+<div class="page-header">
+<h2>🛒 Cart Drawer</h2>
+<p>Kommt als naechstes - ersetzt Upcart (14,99$/Mo)</p>
+</div>
+<div class="card"><p style="color:var(--muted)">In Entwicklung...</p></div>
+</div>
+
+<!-- TAB: Upsell (Placeholder) -->
+<div id="tab-upsell" class="hidden">
+<div class="page-header">
+<h2>💰 Upsell</h2>
+<p>Ersetzt ReConvert/Upsell.com</p>
+</div>
+<div class="card"><p style="color:var(--muted)">In Entwicklung...</p></div>
+</div>
+
+<!-- TAB: Loyalty (Placeholder) -->
+<div id="tab-loyalty" class="hidden">
+<div class="page-header">
+<h2>⭐ Loyalty</h2>
+<p>Ersetzt TrustWILL Loyalty (19$/Mo)</p>
+</div>
+<div class="card"><p style="color:var(--muted)">In Entwicklung...</p></div>
+</div>
+
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SHOP='my-tesla-tuning.myshopify.com';
+const API_VER='2024-01';
+let TOKEN='';
+let settings={
+  dispatch_days:[true,true,true,true,true,true,true],
+  dispatch_time:'22:00',
+  dispatch_delay:1,
+  carrier_days:[true,true,true,true,true,true,false],
+  min_delivery_days:1,
+  max_delivery_days:3,
+  free_shipping_threshold:50
+};
+let holidays=[];
+let overrides=[];
+let allProducts=[];
+
+// ===== AUTH =====
+function handleLogin(){
+  TOKEN=document.getElementById('loginToken').value.trim();
+  if(!TOKEN||!TOKEN.startsWith('shpat_')){document.getElementById('loginError').textContent='Ungueltiger Token (muss mit shpat_ beginnen)';return}
+  localStorage.setItem('mtt_token',TOKEN);
+  showApp();
+}
+function handleLogout(){
+  localStorage.removeItem('mtt_token');
+  TOKEN='';
+  document.getElementById('appScreen').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+}
+function checkAuth(){
+  TOKEN=localStorage.getItem('mtt_token')||'';
+  if(TOKEN)showApp();
+}
+
+async function showApp(){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('appScreen').classList.remove('hidden');
+  // Verify token
+  try{
+    var r=await shopifyGet('/shop.json');
+    if(r.shop){
+      document.getElementById('shopName').textContent=r.shop.name||SHOP;
+      document.getElementById('statusBar').className='status-bar connected';
+    }
+  }catch(e){
+    document.getElementById('statusBar').className='status-bar error';
+    document.getElementById('statusBar').innerHTML='<span>&#9679;</span> Verbindungsfehler - Token pruefen';
+  }
+  await loadSettings();
+  updatePreview();
+}
+
+// ===== SHOPIFY API =====
+async function shopifyGet(endpoint){
+  var r=await fetch('https://'+SHOP+'/admin/api/'+API_VER+endpoint,{headers:{'X-Shopify-Access-Token':TOKEN,'Content-Type':'application/json'}});
+  return r.json();
+}
+async function shopifyPut(endpoint,body){
+  var r=await fetch('https://'+SHOP+'/admin/api/'+API_VER+endpoint,{method:'PUT',headers:{'X-Shopify-Access-Token':TOKEN,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return r.json();
+}
+async function shopifyPost(endpoint,body){
+  var r=await fetch('https://'+SHOP+'/admin/api/'+API_VER+endpoint,{method:'POST',headers:{'X-Shopify-Access-Token':TOKEN,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  return r.json();
+}
+
+// ===== LOAD/SAVE METAFIELDS =====
+async function loadSettings(){
+  try{
+    var r=await shopifyGet('/metafields.json?namespace=mtt_app');
+    var mfs=r.metafields||[];
+    mfs.forEach(function(m){
+      if(m.key==='delivery_settings'){try{settings=JSON.parse(m.value)}catch(e){}}
+      if(m.key==='delivery_holidays'){try{holidays=JSON.parse(m.value)}catch(e){}}
+      if(m.key==='delivery_overrides'){try{overrides=JSON.parse(m.value)}catch(e){}}
+    });
+  }catch(e){console.error('Load error',e)}
+  applyToForm();
+  renderHolidays();
+  renderOverrides();
+}
+
+function applyToForm(){
+  var dIds=['d_mon','d_tue','d_wed','d_thu','d_fri','d_sat','d_sun'];
+  var cIds=['c_mon','c_tue','c_wed','c_thu','c_fri','c_sat','c_sun'];
+  dIds.forEach(function(id,i){document.getElementById(id).checked=settings.dispatch_days[i]});
+  cIds.forEach(function(id,i){document.getElementById(id).checked=settings.carrier_days[i]});
+  document.getElementById('dispatchTime').value=settings.dispatch_time||'22:00';
+  document.getElementById('dispatchDelay').value=settings.dispatch_delay||1;
+  document.getElementById('minDays').value=settings.min_delivery_days||1;
+  document.getElementById('maxDays').value=settings.max_delivery_days||3;
+  document.getElementById('freeShipping').value=settings.free_shipping_threshold||50;
+}
+
+function readFromForm(){
+  var dIds=['d_mon','d_tue','d_wed','d_thu','d_fri','d_sat','d_sun'];
+  var cIds=['c_mon','c_tue','c_wed','c_thu','c_fri','c_sat','c_sun'];
+  settings.dispatch_days=dIds.map(function(id){return document.getElementById(id).checked});
+  settings.carrier_days=cIds.map(function(id){return document.getElementById(id).checked});
+  settings.dispatch_time=document.getElementById('dispatchTime').value;
+  settings.dispatch_delay=parseInt(document.getElementById('dispatchDelay').value)||0;
+  settings.min_delivery_days=parseInt(document.getElementById('minDays').value)||1;
+  settings.max_delivery_days=parseInt(document.getElementById('maxDays').value)||3;
+  settings.free_shipping_threshold=parseInt(document.getElementById('freeShipping').value)||0;
+}
+
+async function saveAll(){
+  readFromForm();
+  try{
+    // Save each metafield
+    await saveMetafield('delivery_settings',JSON.stringify(settings));
+    await saveMetafield('delivery_holidays',JSON.stringify(holidays));
+    await saveMetafield('delivery_overrides',JSON.stringify(overrides));
+    toast('Gespeichert!','var(--success)');
+    updatePreview();
+  }catch(e){
+    console.error(e);
+    toast('Fehler beim Speichern!','var(--danger)');
+  }
+}
+
+async function saveMetafield(key,value){
+  // Check if exists
+  var r=await shopifyGet('/metafields.json?namespace=mtt_app&key='+key);
+  var existing=(r.metafields||[]).find(function(m){return m.key===key});
+  if(existing){
+    await shopifyPut('/metafields/'+existing.id+'.json',{metafield:{value:value,type:'json'}});
+  }else{
+    await shopifyPost('/metafields.json',{metafield:{namespace:'mtt_app',key:key,value:value,type:'json'}});
+  }
+}
+
+// ===== HOLIDAYS =====
+function renderHolidays(){
+  var c=document.getElementById('holidayList');
+  c.innerHTML='';
+  holidays.sort(function(a,b){return(a.date||a).localeCompare(b.date||b)});
+  holidays.forEach(function(h,i){
+    var date=typeof h==='string'?h:h.date;
+    var name=typeof h==='object'?h.name:'';
+    var d=new Date(date);
+    var label=d.toLocaleDateString('de-DE',{weekday:'short',day:'2-digit',month:'2-digit',year:'numeric'});
+    if(name)label+=' - '+name;
+    var div=document.createElement('div');
+    div.className='holiday-item';
+    div.innerHTML='<span>'+label+'</span><span class="del" onclick="removeHoliday('+i+')">✕</span>';
+    c.appendChild(div);
+  });
+  if(!holidays.length)c.innerHTML='<p style="font-size:.8rem;color:var(--muted);padding:8px">Keine Feiertage eingetragen</p>';
+}
+
+function addHoliday(){
+  var date=document.getElementById('holidayDate').value;
+  var name=document.getElementById('holidayName').value.trim();
+  if(!date){toast('Datum auswaehlen!','var(--danger)');return}
+  if(holidays.some(function(h){return(typeof h==='string'?h:h.date)===date})){toast('Datum existiert bereits','var(--warning)');return}
+  holidays.push({date:date,name:name||null});
+  document.getElementById('holidayDate').value='';
+  document.getElementById('holidayName').value='';
+  renderHolidays();
+  updatePreview();
+}
+
+function removeHoliday(i){
+  holidays.splice(i,1);
+  renderHolidays();
+  updatePreview();
+}
+
+// ===== PRODUCT OVERRIDES =====
+function renderOverrides(){
+  var c=document.getElementById('overrideList');
+  c.innerHTML='';
+  overrides.forEach(function(o,i){
+    var div=document.createElement('div');
+    div.className='override-item';
+    div.innerHTML='<span class="name" title="'+o.title+'">'+o.title+'</span>'+
+      '<span style="font-size:.75rem;color:var(--muted)">Min:</span><input type="number" value="'+o.min_days+'" min="0" onchange="updateOverride('+i+',\'min\',this.value)">'+
+      '<span style="font-size:.75rem;color:var(--muted)">Max:</span><input type="number" value="'+o.max_days+'" min="0" onchange="updateOverride('+i+',\'max\',this.value)">'+
+      '<span class="del" onclick="removeOverride('+i+')">✕</span>';
+    c.appendChild(div);
+  });
+  if(!overrides.length)c.innerHTML='<p style="font-size:.8rem;color:var(--muted);padding:8px">Keine Produkt-Ausnahmen</p>';
+}
+
+function updateOverride(i,field,val){
+  if(field==='min')overrides[i].min_days=parseInt(val)||0;
+  if(field==='max')overrides[i].max_days=parseInt(val)||0;
+  updatePreview();
+}
+
+function removeOverride(i){
+  overrides.splice(i,1);
+  renderOverrides();
+}
+
+var searchTimer=null;
+function searchProducts(q){
+  clearTimeout(searchTimer);
+  var c=document.getElementById('overrideResults');
+  if(q.length<2){c.innerHTML='';return}
+  searchTimer=setTimeout(async function(){
+    try{
+      var r=await shopifyGet('/products.json?title='+encodeURIComponent(q)+'&limit=10&fields=id,title');
+      var products=r.products||[];
+      c.innerHTML='';
+      products.forEach(function(p){
+        if(overrides.some(function(o){return o.product_id===p.id}))return;
+        var div=document.createElement('div');
+        div.className='override-result';
+        div.textContent=p.title;
+        div.onclick=function(){addOverride(p);c.innerHTML='';document.getElementById('overrideSearch').value=''};
+        c.appendChild(div);
+      });
+      if(!products.length)c.innerHTML='<p style="font-size:.8rem;color:var(--muted);padding:6px">Keine Produkte gefunden</p>';
+    }catch(e){console.error(e)}
+  },300);
+}
+
+function addOverride(product){
+  overrides.push({product_id:product.id,title:product.title,min_days:7,max_days:14});
+  renderOverrides();
+  updatePreview();
+}
+
+// ===== PREVIEW =====
+function updatePreview(){
+  readFromForm();
+  var now=new Date();
+  var minDate=calculateDeliveryDate(now,settings.dispatch_delay,settings.min_delivery_days);
+  var maxDate=calculateDeliveryDate(now,settings.dispatch_delay,settings.max_delivery_days);
+  var minStr=minDate.toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'numeric'});
+  var maxStr=maxDate.toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'numeric'});
+  var html='<div style="font-size:1rem;margin-bottom:6px">📦 <strong>Lieferung zwischen <span style="color:#00b894">'+minStr+'</span> und <span style="color:#00b894">'+maxStr+'</span></strong></div>';
+  if(settings.free_shipping_threshold>0){
+    html+='<div style="font-size:.9rem">🚚 <strong style="color:#00b894">Kostenloser Versand ab '+settings.free_shipping_threshold+' € Bestellwert</strong></div>';
+  }
+  document.getElementById('deliveryPreview').innerHTML=html;
+}
+
+function calculateDeliveryDate(fromDate,dispatchDelay,deliveryDays){
+  var date=new Date(fromDate);
+  // Check if past dispatch time
+  var now=new Date();
+  var dispatchHour=parseInt((settings.dispatch_time||'22:00').split(':')[0]);
+  if(now.getHours()>=dispatchHour)date.setDate(date.getDate()+1);
+  // Add dispatch delay (skip non-dispatch days + holidays)
+  var remaining=dispatchDelay;
+  while(remaining>0){
+    date.setDate(date.getDate()+1);
+    if(isDispatchDay(date)&&!isHoliday(date))remaining--;
+  }
+  // Add delivery days (skip non-carrier days + holidays)
+  remaining=deliveryDays;
+  while(remaining>0){
+    date.setDate(date.getDate()+1);
+    if(isCarrierDay(date)&&!isHoliday(date))remaining--;
+  }
+  return date;
+}
+
+function isDispatchDay(d){
+  var dow=d.getDay();// 0=Sun
+  var idx=dow===0?6:dow-1;// 0=Mon
+  return settings.dispatch_days[idx];
+}
+
+function isCarrierDay(d){
+  var dow=d.getDay();
+  var idx=dow===0?6:dow-1;
+  return settings.carrier_days[idx];
+}
+
+function isHoliday(d){
+  var ds=d.toISOString().slice(0,10);
+  return holidays.some(function(h){return(typeof h==='string'?h:h.date)===ds});
+}
+
+// ===== TABS =====
+function switchTab(name){
+  document.querySelectorAll('.nav-item').forEach(function(n){n.classList.toggle('active',n.dataset.tab===name)});
+  ['delivery','cart','upsell','loyalty'].forEach(function(t){
+    var el=document.getElementById('tab-'+t);
+    if(el)el.classList.toggle('hidden',t!==name);
+  });
+}
+
+// ===== TOAST =====
+function toast(msg,bg){
+  var t=document.getElementById('toast');
+  t.textContent=msg;t.style.background=bg||'var(--success)';
+  t.classList.add('show');setTimeout(function(){t.classList.remove('show')},2000);
+}
+
+// ===== INIT =====
+// Add change listeners for live preview
+document.addEventListener('DOMContentLoaded',function(){
+  checkAuth();
+  document.querySelectorAll('input[type=checkbox],input[type=number],input[type=time]').forEach(function(el){
+    el.addEventListener('change',updatePreview);
+  });
+});
+</script>
+</body>
+</html>
