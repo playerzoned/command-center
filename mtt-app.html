@@ -167,9 +167,7 @@ input:focus,select:focus{border-color:var(--accent)}
 const SUPA_URL='https://awpaatubmbqjekoiktxd.supabase.co';
 const SUPA_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF3cGFhdHVibWJxamVrb2lrdHhkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4NjcyMjEsImV4cCI6MjA4OTQ0MzIyMX0.MXkpOZSC08Eva4MLI2QyxXj-avKB7KLJD51fEuWmdBM';
 const sb=supabase.createClient(SUPA_URL,SUPA_KEY);
-const SHOP='my-tesla-tuning.myshopify.com';
-const API_VER='2024-01';
-let SHOPIFY_TOKEN='';
+// Shopify API laeuft ueber Supabase Edge Functions (kein Token im Browser)
 let currentUser=null;
 let settings={dispatch_days:[true,true,true,true,true,true,true],dispatch_time:'22:00',dispatch_delay:1,carrier_days:[true,true,true,true,true,true,false],min_delivery_days:1,max_delivery_days:3,free_shipping_threshold:50};
 let holidays=[];
@@ -189,31 +187,20 @@ function handleLogout(){sb.auth.signOut();currentUser=null;document.getElementBy
 
 async function showApp(){
   document.getElementById('loginScreen').classList.add('hidden');
-  // Load Shopify token from Supabase
-  try{
-    var r=await sb.from('user_settings').select('shopify_token,shopify_shop').eq('user_id',currentUser.id).maybeSingle();
-    if(r.data&&r.data.shopify_token){SHOPIFY_TOKEN=r.data.shopify_token}
-    else{document.getElementById('statusBar').className='status-bar error';document.getElementById('statusBar').innerHTML='Kein Shopify Token hinterlegt. Kontaktiere den Admin.';return}
-  }catch(e){console.error(e)}
   document.getElementById('appScreen').classList.remove('hidden');
   await loadSettings();
   updatePreview();
 }
 
-// ===== SHOPIFY API =====
-async function shopifyGet(ep){return(await fetch('https://'+SHOP+'/admin/api/'+API_VER+ep,{headers:{'X-Shopify-Access-Token':SHOPIFY_TOKEN,'Content-Type':'application/json'}})).json()}
-async function shopifyPut(ep,b){return(await fetch('https://'+SHOP+'/admin/api/'+API_VER+ep,{method:'PUT',headers:{'X-Shopify-Access-Token':SHOPIFY_TOKEN,'Content-Type':'application/json'},body:JSON.stringify(b)})).json()}
-async function shopifyPost(ep,b){return(await fetch('https://'+SHOP+'/admin/api/'+API_VER+ep,{method:'POST',headers:{'X-Shopify-Access-Token':SHOPIFY_TOKEN,'Content-Type':'application/json'},body:JSON.stringify(b)})).json()}
-
-// ===== LOAD/SAVE METAFIELDS =====
+// ===== LOAD/SAVE via SUPABASE =====
 async function loadSettings(){
   try{
-    var r=await shopifyGet('/metafields.json?namespace=mtt_app');
-    (r.metafields||[]).forEach(function(m){
-      if(m.key==='delivery_settings')try{settings=JSON.parse(m.value)}catch(e){}
-      if(m.key==='delivery_holidays')try{holidays=JSON.parse(m.value)}catch(e){}
-      if(m.key==='delivery_overrides')try{overrides=JSON.parse(m.value)}catch(e){}
-    });
+    var r=await sb.from('mtt_delivery_settings').select('settings,holidays,overrides').eq('user_id',currentUser.id).maybeSingle();
+    if(r.data){
+      if(r.data.settings)settings=r.data.settings;
+      if(r.data.holidays)holidays=r.data.holidays;
+      if(r.data.overrides)overrides=r.data.overrides;
+    }
   }catch(e){console.error('Load error',e)}
   applyToForm();renderHolidays();renderOverrides();
 }
@@ -241,18 +228,15 @@ function readFromForm(){
 async function saveAll(){
   readFromForm();
   try{
-    await saveMetafield('delivery_settings',JSON.stringify(settings));
-    await saveMetafield('delivery_holidays',JSON.stringify(holidays));
-    await saveMetafield('delivery_overrides',JSON.stringify(overrides));
+    var r=await sb.from('mtt_delivery_settings').update({
+      settings:settings,
+      holidays:holidays,
+      overrides:overrides,
+      updated_at:new Date().toISOString()
+    }).eq('user_id',currentUser.id);
+    if(r.error)throw r.error;
     toast('Gespeichert!','var(--success)');updatePreview();
   }catch(e){console.error(e);toast('Fehler beim Speichern!','var(--danger)')}
-}
-
-async function saveMetafield(key,value){
-  var r=await shopifyGet('/metafields.json?namespace=mtt_app&key='+key);
-  var ex=(r.metafields||[]).find(function(m){return m.key===key});
-  if(ex){await shopifyPut('/metafields/'+ex.id+'.json',{metafield:{value:value,type:'json'}})}
-  else{await shopifyPost('/metafields.json',{metafield:{namespace:'mtt_app',key:key,value:value,type:'json'}})}
 }
 
 // ===== HOLIDAYS =====
@@ -302,8 +286,11 @@ function searchProducts(q){
   if(q.length<2){c.innerHTML='';return}
   searchTimer=setTimeout(async function(){
     try{
-      var r=await shopifyGet('/products.json?title='+encodeURIComponent(q)+'&limit=10&fields=id,title');
-      c.innerHTML='';(r.products||[]).forEach(function(p){
+      var session=await sb.auth.getSession();
+      var token=session.data.session.access_token;
+      var r=await fetch(SUPA_URL+'/functions/v1/mtt-products?q='+encodeURIComponent(q),{headers:{'Authorization':'Bearer '+token}});
+      var data=await r.json();
+      c.innerHTML='';(data.products||[]).forEach(function(p){
         if(overrides.some(function(o){return o.product_id===p.id}))return;
         var div=document.createElement('div');div.className='override-result';div.textContent=p.title;
         div.onclick=function(){overrides.push({product_id:p.id,title:p.title,min_days:7,max_days:14});renderOverrides();c.innerHTML='';document.getElementById('overrideSearch').value=''};
